@@ -1,0 +1,78 @@
+graph TB
+    %% Context Level (C1)
+    User[👤 User/Client System]
+    Admin[👤 Administrator]
+    
+    subgraph "Workflow Engine System"
+        direction TB
+        
+        %% Container Level (C2)
+        subgraph "API Layer"
+            WebAPI[🌐 Web API<br/>ASP.NET Core 8<br/>REST Endpoints]
+            Swagger[📖 Swagger UI<br/>API Documentation]
+        end
+        
+        subgraph "Core Engine"
+            WorkflowEngine[⚙️ Workflow Engine<br/>Orchestration Logic]
+            StepRegistry[📋 Step Registry<br/>Available Steps]
+        end
+        
+        subgraph "Background Processing"
+            HangfireServer[🔄 Hangfire Server<br/>Job Processing]
+            HangfireDash[📊 Dashboard<br/>Monitoring UI]
+        end
+        
+        subgraph "Step Implementations"
+            LogStep[📝 Log Step]
+            EmailStep[📧 Email Step]
+            DelayStep[⏱️ Delay Step]
+            CustomStep[🔧 Custom Steps]
+        end
+        
+        subgraph "Data Layer"
+            DbContext[🗄️ EF DbContext<br/>Data Access]
+            WorkflowDB[(📊 Workflow Database<br/>Definitions & Executions)]
+            HangfireDB[(📋 Hangfire Storage<br/>Job Queue & History)]
+        end
+    end
+    
+    %% External Services
+    EmailService[📧 Email Service<br/>External SMTP]
+    
+    %% User Interactions
+    User -->|HTTP REST| WebAPI
+    Admin -->|Monitor| HangfireDash
+    User -->|Browse API| Swagger
+    
+    %% Internal Flow
+    WebAPI -->|Orchestrate| WorkflowEngine
+    WorkflowEngine -->|Schedule Jobs| HangfireServer
+    WorkflowEngine -->|Register| StepRegistry
+    
+    HangfireServer -->|Execute| LogStep
+    HangfireServer -->|Execute| EmailStep
+    HangfireServer -->|Execute| DelayStep
+    HangfireServer -->|Execute| CustomStep
+    
+    WorkflowEngine -->|Persist| DbContext
+    DbContext -->|Read/Write| WorkflowDB
+    HangfireServer -->|Store Jobs| HangfireDB
+    
+    %% External Integrations
+    EmailStep -->|Send| EmailService
+    
+    %% Styling
+    classDef userClass fill:#f9f,stroke:#333,stroke-width:2px
+    classDef apiClass fill:#bbf,stroke:#333,stroke-width:2px
+    classDef coreClass fill:#bfb,stroke:#333,stroke-width:2px
+    classDef stepClass fill:#ffb,stroke:#333,stroke-width:2px
+    classDef dataClass fill:#fbb,stroke:#333,stroke-width:2px
+    classDef externalClass fill:#bff,stroke:#333,stroke-width:2px
+    
+    class User,Admin userClass
+    class WebAPI,Swagger,HangfireDash apiClass
+    class WorkflowEngine,StepRegistry,HangfireServer coreClass
+    class LogStep,EmailStep,DelayStep,CustomStep stepClass
+    class DbContext,WorkflowDB,HangfireDB dataClass
+    class EmailService externalClass
+

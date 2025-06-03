@@ -1,0 +1,89 @@
+erDiagram
+    WorkflowDefinition {
+        guid Id PK
+        string Name UK
+        string Description
+        bool IsActive
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
+    
+    StepDefinition {
+        guid Id PK
+        string Name
+        string StepType
+        string Description
+        string Configuration
+        string InputSchema
+        string OutputSchema
+        bool IsActive
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
+    
+    WorkflowStep {
+        guid Id PK
+        guid WorkflowDefinitionId FK
+        guid StepDefinitionId FK
+        int Order
+        string ConditionRules
+        int DelayMinutes
+        string StepConfiguration
+        datetime CreatedAt
+    }
+    
+    WorkflowExecution {
+        guid Id PK
+        guid WorkflowDefinitionId FK
+        int Status
+        string InputData
+        string OutputData
+        datetime ScheduledTime
+        datetime StartedTime
+        datetime CompletedTime
+        string ErrorMessage
+        datetime CreatedAt
+    }
+    
+    StepExecution {
+        guid Id PK
+        guid WorkflowExecutionId FK
+        guid WorkflowStepId FK
+        int Status
+        string InputData
+        string OutputData
+        datetime ScheduledTime
+        datetime StartedTime
+        datetime CompletedTime
+        string ErrorMessage
+        int RetryCount
+        int MaxRetries
+        datetime CreatedAt
+    }
+    
+    %% Relationships
+    WorkflowDefinition ||--o{ WorkflowStep : "has steps"
+    StepDefinition ||--o{ WorkflowStep : "defines"
+    WorkflowDefinition ||--o{ WorkflowExecution : "executed as"
+    WorkflowExecution ||--o{ StepExecution : "contains"
+    WorkflowStep ||--o{ StepExecution : "executed as"
+    
+    %% Status Enums
+    WorkflowExecutionStatus {
+        int Pending
+        int Running
+        int Completed
+        int Failed
+        int Cancelled
+        int Paused
+    }
+    
+    StepExecutionStatus {
+        int Pending
+        int Running
+        int Completed
+        int Failed
+        int Skipped
+        int Retrying
+    }
+

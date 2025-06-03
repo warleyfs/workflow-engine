@@ -1,0 +1,129 @@
+sequenceDiagram
+    participant C as Client
+    participant API as Web API
+    participant WE as Workflow Engine
+    participant H as Hangfire
+    participant DB as Database
+    participant S as Step Implementation
+    
+    Note over C,S: Workflow Creation & Execution Flow
+    
+    %% 1. Create Demo Workflow
+    C->>API: POST /api/workflow/demo
+    API->>DB: Create StepDefinitions
+    API->>DB: Create WorkflowDefinition
+    API->>DB: Create WorkflowSteps
+    API-->>C: WorkflowDefinitionId
+    
+    %% 2. List Available Workflows
+    C->>API: GET /api/workflow/definitions
+    API->>DB: Query WorkflowDefinitions
+    API-->>C: List of Workflows
+    
+    %% 3. Start Workflow Execution
+    C->>API: POST /api/workflow/{id}/execute
+    API->>WE: StartWorkflowAsync()
+    
+    WE->>DB: Create WorkflowExecution
+    WE->>DB: Create StepExecutions
+    
+    alt Scheduled Execution
+        WE->>H: Schedule(ProcessWorkflowAsync, scheduledTime)
+    else Immediate Execution
+        WE->>H: Enqueue(ProcessWorkflowAsync)
+    end
+    
+    WE-->>API: ExecutionId
+    API-->>C: 200 OK + ExecutionId
+    
+    Note over H,S: Background Processing
+    
+    %% 4. Process Workflow
+    H->>WE: ProcessWorkflowAsync(executionId)
+    WE->>DB: Update status to Running
+    WE->>DB: Get next pending step
+    
+    alt Step has delay
+        WE->>H: Schedule(ProcessStepAsync, delayTime)
+    else No delay
+        WE->>H: Enqueue(ProcessStepAsync)
+    end
+    
+    %% 5. Process Individual Step
+    H->>WE: ProcessStepAsync(stepExecutionId)
+    WE->>DB: Update step status to Running
+    WE->>S: Load step implementation
+    
+    %% 6. Step Execution Logic
+    WE->>S: CanExecuteAsync(context)
+    S-->>WE: true/false
+    
+    alt Can Execute
+        WE->>S: ExecuteAsync(context)
+        
+        alt Step Logic (e.g., Email)
+            S->>S: Extract configuration
+            S->>S: Simulate email sending
+            Note over S: await Task.Delay(1000)
+            S-->>WE: StepResult.Success()
+        else Step Logic (e.g., Delay)
+            S->>S: Extract delay configuration
+            Note over S: await Task.Delay(delaySeconds)
+            S-->>WE: StepResult.Success()
+        else Step Logic (e.g., Log)
+            S->>S: Extract log configuration
+            S->>S: Write to logger
+            S-->>WE: StepResult.Success()
+        end
+        
+        alt Step Success
+            WE->>DB: Update step status to Completed
+            WE->>H: Enqueue(ProcessWorkflowAsync) // Continue workflow
+        else Step Failure with Retry
+            WE->>DB: Update retry count
+            WE->>H: Schedule(ProcessStepAsync, retryDelay)
+        else Step Failure (Max Retries)
+            WE->>DB: Update step status to Failed
+            WE->>DB: Update workflow status to Failed
+        end
+    else Cannot Execute
+        WE->>DB: Update step status to Skipped
+        WE->>H: Enqueue(ProcessWorkflowAsync) // Continue workflow
+    end
+    
+    %% 7. Workflow Completion Check
+    Note over WE,DB: Check if all steps completed
+    WE->>DB: Query remaining steps
+    
+    alt All Steps Completed
+        WE->>DB: Update workflow status to Completed
+    else More Steps Pending
+        Note over WE: Continue processing next step
+    end
+    
+    %% 8. Monitor Execution
+    C->>API: GET /api/workflow/execution/{id}
+    API->>WE: GetWorkflowStatusAsync()
+    WE->>DB: Query execution details
+    WE-->>API: WorkflowExecutionResult
+    API-->>C: Status + Step Details
+    
+    %% 9. Control Operations
+    alt Pause Workflow
+        C->>API: POST /api/workflow/execution/{id}/pause
+        API->>WE: PauseWorkflowAsync()
+        WE->>DB: Update status to Paused
+        API-->>C: Success
+    else Resume Workflow
+        C->>API: POST /api/workflow/execution/{id}/resume
+        API->>WE: ResumeWorkflowAsync()
+        WE->>DB: Update status to Running
+        WE->>H: Enqueue(ProcessWorkflowAsync)
+        API-->>C: Success
+    else Cancel Workflow
+        C->>API: POST /api/workflow/execution/{id}/cancel
+        API->>WE: CancelWorkflowAsync()
+        WE->>DB: Update status to Cancelled
+        API-->>C: Success
+    end
+
