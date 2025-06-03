@@ -181,6 +181,49 @@ Acesse `http://localhost:5000/hangfire` para:
 - **Skipped**: Pulada (condição não atendida)
 - **Retrying**: Tentativa de retry
 
+## 🎨 Interface Gráfica
+
+O projeto inclui uma **interface web completa** para criar, gerenciar e monitorar workflows de forma visual.
+
+### 🚀 Funcionalidades da Interface
+
+- **Designer Visual**: Interface drag-and-drop para criar workflows
+- **Gerenciamento**: Lista, executa e exclui workflows
+- **Monitor em Tempo Real**: Acompanha execuções com auto-refresh
+- **Controle de Execução**: Pausa, retoma e cancela workflows
+- **Dashboard**: Métricas e visualizações de status
+
+### 🏃‍♂️ Como Executar a Interface
+
+1. **Execute o backend:**
+```bash
+cd WorkflowEngine.Api
+dotnet run
+```
+
+2. **Em outro terminal, execute o frontend:**
+```bash
+cd workflow-engine-web
+npm install
+npm start
+```
+
+3. **Acesse:** [http://localhost:3000](http://localhost:3000)
+
+### 📱 Capturas de Tela
+
+#### Designer de Workflows
+- Interface drag-and-drop com componentes reutilizáveis
+- Configuração visual de cada step
+- Conexões entre steps com validação
+
+#### Monitor de Execuções
+- Dashboard com métricas em tempo real
+- Controles de execução (play, pause, stop)
+- Detalhes completos de cada execução
+
+Para mais detalhes, veja: [workflow-engine-web/README.md](workflow-engine-web/README.md)
+
 ## 🔧 Configuração
 
 ### Banco de Dados
