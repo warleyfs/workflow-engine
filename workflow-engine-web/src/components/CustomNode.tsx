@@ -19,15 +19,16 @@ import {
 } from '@mui/icons-material';
 import { StepExecutionStatus } from '../types/workflow';
 
-interface CustomNodeData {
+interface CustomNodeData extends Record<string, unknown> {
   label: string;
   stepType: string;
-  configuration: Record<string, any>;
   status?: StepExecutionStatus;
-  onConfigClick?: (nodeId: string) => void;
+  configuration: Record<string, any>;
+  onConfigClick?: (id: string) => void;
 }
 
-const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ id, data }) => {
+const CustomNode: React.FC<NodeProps> = ({ id, data }) => {
+  const nodeData = data as CustomNodeData;
   const getStepIcon = (stepType: string) => {
     switch (stepType) {
       case 'LogStep': return <CodeIcon />;
@@ -77,19 +78,19 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ id, data }) => {
           minHeight: 80,
           padding: 1,
           borderRadius: 2,
-          border: data.status ? `2px solid` : 'none',
-          borderColor: data.status ? `${getStatusColor(data.status)}.main` : 'transparent',
+          border: nodeData.status ? `2px solid` : 'none',
+          borderColor: nodeData.status ? `${getStatusColor(nodeData.status)}.main` : 'transparent',
           backgroundColor: 'background.paper',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {getStepIcon(data.stepType)}
-            {data.status && getStatusIcon(data.status)}
+            {getStepIcon(nodeData.stepType)}
+            {nodeData.status && getStatusIcon(nodeData.status)}
           </Box>
           <IconButton
             size="small"
-            onClick={() => data.onConfigClick?.(id)}
+            onClick={() => nodeData.onConfigClick?.(id)}
             sx={{ p: 0.5 }}
           >
             <SettingsIcon fontSize="small" />
@@ -97,19 +98,19 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ id, data }) => {
         </Box>
         
         <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
-          {data.label}
+          {nodeData.label}
         </Typography>
         
-        {data.status && (
+        {nodeData.status && (
           <Chip
-            label={data.status}
+            label={nodeData.status}
             size="small"
-            color={getStatusColor(data.status) as any}
+            color={getStatusColor(nodeData.status) as any}
             sx={{ fontSize: '0.7rem' }}
           />
         )}
         
-        {Object.keys(data.configuration).length > 0 && (
+        {Object.keys(nodeData.configuration).length > 0 && (
           <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
             Configurado
           </Typography>

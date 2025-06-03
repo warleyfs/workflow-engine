@@ -214,7 +214,7 @@ const ExecutionMonitor: React.FC = () => {
         {Object.values(WorkflowExecutionStatus).map((status) => {
           const count = executions.filter(e => e.status === status).length;
           return (
-            <Grid item xs={12} sm={6} md={2} key={status}>
+            <Grid size={{ xs: 12, sm: 6, md: 2 }} key={status}>
               <Card>
                 <CardContent sx={{ textAlign: 'center', py: 2 }}>
                   <Typography variant="h4" color={`${getStatusColor(status)}.main`}>
@@ -360,7 +360,7 @@ const ExecutionMonitor: React.FC = () => {
           {selectedExecution && (
             <Box>
               <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="subtitle2">Status:</Typography>
                   <Chip
                     label={selectedExecution.status}
@@ -368,7 +368,7 @@ const ExecutionMonitor: React.FC = () => {
                     sx={{ mt: 0.5 }}
                   />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid size={6}>
                   <Typography variant="subtitle2">Duração:</Typography>
                   <Typography variant="body2">
                     {formatDuration(selectedExecution.startedAt, selectedExecution.completedAt)}

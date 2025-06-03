@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   ReactFlow,
   Node,
@@ -33,14 +33,13 @@ import {
 import {
   Add as AddIcon,
   Save as SaveIcon,
-  PlayArrow as PlayIcon,
   Code as CodeIcon,
   Email as EmailIcon,
   Schedule as ScheduleIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
 import '@xyflow/react/dist/style.css';
-import { WorkflowNode, WorkflowEdge, StepType } from '../types/workflow';
+import { StepType } from '../types/workflow';
 import { workflowApi } from '../services/api';
 import CustomNode from './CustomNode';
 
@@ -81,8 +80,8 @@ const nodeTypes: NodeTypes = {
 };
 
 const WorkflowDesigner: React.FC = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState('');
@@ -147,8 +146,8 @@ const WorkflowDesigner: React.FC = () => {
   const handleSaveWorkflow = async () => {
     try {
       const steps = nodes.map((node, index) => ({
-        stepType: node.data.stepType,
-        name: node.data.label,
+        stepType: node.data.stepType as string,
+        name: node.data.label as string,
         description: '',
         configuration: node.data.configuration || {},
         order: index + 1,
@@ -345,7 +344,7 @@ const WorkflowDesigner: React.FC = () => {
       {/* Configuration Dialog */}
       <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          Configurar {selectedNode?.data.label}
+          {`Configurar ${selectedNode?.data.label}`}
         </DialogTitle>
         <DialogContent>
           {selectedStepType && Object.entries(selectedStepType.configurationSchema).map(([key, field]) =>
