@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box, AppBar, Toolbar, Typography, Tabs, Tab } from '@mui/material';
 import WorkflowDesigner from './components/WorkflowDesigner';
 import WorkflowList from './components/WorkflowList';
 import ExecutionMonitor from './components/ExecutionMonitor';
+import Dashboard from './components/Dashboard';
+import ExecutionsList from './components/ExecutionsList';
+import WorkflowMetrics from './components/WorkflowMetrics';
+import signalRService from './services/signalr';
 import './App.css';
 
 const theme = createTheme({
@@ -46,6 +50,26 @@ function TabPanel(props: TabPanelProps) {
 function App() {
   const [tabValue, setTabValue] = useState(0);
 
+  useEffect(() => {
+    // Initialize SignalR connection
+    const initSignalR = async () => {
+      try {
+        if (!signalRService.isConnected) {
+          await signalRService.start();
+        }
+      } catch (error) {
+        console.error('Failed to start SignalR connection:', error);
+      }
+    };
+
+    initSignalR();
+
+    // Cleanup on unmount
+    return () => {
+      signalRService.stop();
+    };
+  }, []);
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
@@ -63,22 +87,43 @@ function App() {
         </AppBar>
         
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={handleTabChange} aria-label="workflow tabs">
+          <Tabs 
+            value={tabValue} 
+            onChange={handleTabChange} 
+            aria-label="workflow tabs"
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Dashboard" />
             <Tab label="Designer" />
             <Tab label="Workflows" />
-            <Tab label="Execuções" />
+            <Tab label="Executions" />
+            <Tab label="Metrics" />
+            <Tab label="Monitor" />
           </Tabs>
         </Box>
         
         <TabPanel value={tabValue} index={0}>
-          <WorkflowDesigner />
+          <Dashboard />
         </TabPanel>
         
         <TabPanel value={tabValue} index={1}>
-          <WorkflowList />
+          <WorkflowDesigner />
         </TabPanel>
         
         <TabPanel value={tabValue} index={2}>
+          <WorkflowList />
+        </TabPanel>
+        
+        <TabPanel value={tabValue} index={3}>
+          <ExecutionsList />
+        </TabPanel>
+        
+        <TabPanel value={tabValue} index={4}>
+          <WorkflowMetrics />
+        </TabPanel>
+        
+        <TabPanel value={tabValue} index={5}>
           <ExecutionMonitor />
         </TabPanel>
       </Box>

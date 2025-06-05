@@ -18,7 +18,7 @@ export interface StepDefinition {
 }
 
 export interface WorkflowExecution {
-  id: string;
+  executionId: string;
   workflowDefinitionId: string;
   status: WorkflowExecutionStatus;
   startedAt?: Date;

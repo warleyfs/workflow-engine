@@ -76,7 +76,7 @@ const WorkflowList: React.FC = () => {
 
       setExecuteDialogOpen(false);
       setInputData('{}');
-      alert(`Workflow executado com sucesso! ID da execução: ${result.id}`);
+      alert(`Workflow executado com sucesso! ID da execução: ${result.executionId}`);
     } catch (err) {
       setError('Erro ao executar workflow');
       console.error('Erro ao executar workflow:', err);
@@ -190,7 +190,7 @@ const WorkflowList: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {formatDate(workflow.updatedAt)}
+                      {workflow.updatedAt ? formatDate(workflow.updatedAt) : 'Nunca atualizado'}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">

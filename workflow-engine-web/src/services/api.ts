@@ -6,6 +6,14 @@ import {
   CreateWorkflowRequest,
   ExecuteWorkflowRequest
 } from '../types/workflow';
+import {
+  DashboardModel,
+  ExecutionListResponse,
+  WorkflowMetrics,
+  StepStatistics,
+  ExecutionLogs,
+  ExecutionFilters
+} from '../types/monitoring';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -79,6 +87,48 @@ export const workflowApi = {
   // Demo endpoint
   createDemoWorkflow: async (): Promise<WorkflowDefinition> => {
     const response = await api.post('/workflow/demo');
+    return response.data;
+  },
+};
+
+// Monitoring API
+export const monitoringApi = {
+  // Dashboard
+  getDashboard: async (): Promise<DashboardModel> => {
+    const response = await api.get('/monitoring/dashboard');
+    return response.data;
+  },
+
+  // Executions
+  getExecutions: async (filters?: ExecutionFilters): Promise<ExecutionListResponse> => {
+    const params = new URLSearchParams();
+    
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.workflowDefinitionId) params.append('workflowDefinitionId', filters.workflowDefinitionId);
+    if (filters?.startDate) params.append('startDate', filters.startDate.toISOString());
+    if (filters?.endDate) params.append('endDate', filters.endDate.toISOString());
+    if (filters?.page) params.append('page', filters.page.toString());
+    if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
+    
+    const response = await api.get(`/monitoring/executions?${params.toString()}`);
+    return response.data;
+  },
+
+  // Workflow Metrics
+  getWorkflowMetrics: async (workflowId: string): Promise<WorkflowMetrics> => {
+    const response = await api.get(`/monitoring/workflow/${workflowId}/metrics`);
+    return response.data;
+  },
+
+  // Step Statistics
+  getStepStatistics: async (): Promise<StepStatistics[]> => {
+    const response = await api.get('/monitoring/steps/statistics');
+    return response.data;
+  },
+
+  // Execution Logs
+  getExecutionLogs: async (executionId: string): Promise<ExecutionLogs> => {
+    const response = await api.get(`/monitoring/execution/${executionId}/logs`);
     return response.data;
   },
 };

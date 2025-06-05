@@ -1,3 +1,340 @@
+# Workflow Engine
+
+Um sistema de execução de workflows distribuído construído com .NET 8, PostgreSQL e Hangfire.
+
+## Características
+
+- ✅ Execução assíncrona de workflows com steps sequenciais
+- ✅ Sistema de retry automático com backoff exponencial
+- ✅ Suporte a delays entre steps
+- ✅ Estados de workflow (Pending, Running, Completed, Failed, Cancelled, Paused)
+- ✅ Interface web para monitoramento (Hangfire Dashboard)
+- ✅ Steps extensíveis (Log, Email, Delay)
+- ✅ Persistência em PostgreSQL
+- ✅ API REST completa
+
+## Estrutura do Projeto
+
+```
+WorkflowEngine/
+├── WorkflowEngine.Api/          # API REST
+├── WorkflowEngine.Core/         # Lógica principal e modelos
+├── WorkflowEngine.Worker/       # Worker em background
+└── WorkflowEngine.Data/         # Projeto separado para dados (se necessário)
+```
+
+## Pré-requisitos
+
+- .NET 8 SDK
+- PostgreSQL 12+
+- Docker (opcional, para PostgreSQL)
+
+## Configuração
+
+### 1. Banco de Dados PostgreSQL
+
+#### Opção A: Docker
+```bash
+docker run --name workflow-postgres \
+  -e POSTGRES_PASSWORD=workflow123 \
+  -e POSTGRES_USER=workflow \
+  -e POSTGRES_DB=workflowengine \
+  -p 5432:5432 -d postgres:15
+```
+
+#### Opção B: PostgreSQL Local
+Crie um banco de dados chamado `workflowengine` com um usuário `workflow`.
+
+### 2. String de Conexão
+
+Edite `appsettings.json` na API:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=workflowengine;Username=workflow;Password=workflow123"
+  }
+}
+```
+
+### 3. Executar a Aplicação
+
+```bash
+# Executar a API
+cd WorkflowEngine.Api
+dotnet run
+
+# Em outro terminal, executar o Worker (opcional)
+cd WorkflowEngine.Worker
+dotnet run
+```
+
+A API estará disponível em: `https://localhost:7000` ou `http://localhost:5000`
+
+Hangfire Dashboard: `http://localhost:5000/hangfire`
+
+## Uso da API
+
+### 1. Criar um Workflow de Demonstração
+
+```bash
+curl -X POST "http://localhost:5000/api/workflow/demo" \
+  -H "Content-Type: application/json"
+```
+
+Este endpoint cria um workflow de exemplo com 4 steps:
+1. Log Start
+2. Wait 5 seconds
+3. Send notification (com 1 minuto de delay)
+4. Log End
+
+### 2. Listar Workflows Disponíveis
+
+```bash
+curl "http://localhost:5000/api/workflow/definitions"
+```
+
+### 3. Executar um Workflow
+
+```bash
+curl -X POST "http://localhost:5000/api/workflow/{workflowDefinitionId}/execute" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputData": {
+      "userName": "João",
+      "email": "joao@exemplo.com"
+    },
+    "scheduledTime": null
+  }'
+```
+
+### 4. Verificar Status de Execução
+
+```bash
+curl "http://localhost:5000/api/workflow/execution/{executionId}"
+```
+
+### 5. Controlar Execução
+
+```bash
+# Pausar
+curl -X POST "http://localhost:5000/api/workflow/execution/{executionId}/pause"
+
+# Retomar
+curl -X POST "http://localhost:5000/api/workflow/execution/{executionId}/resume"
+
+# Cancelar
+curl -X POST "http://localhost:5000/api/workflow/execution/{executionId}/cancel"
+```
+
+## Steps Disponíveis
+
+### LogStep
+Registra mensagens no log da aplicação.
+
+**Configuração:**
+```json
+{
+  "Message": "Mensagem a ser logada",
+  "Level": "Information" // Information, Warning, Error, Debug
+}
+```
+
+### EmailStep
+Simula o envio de email (não envia realmente).
+
+**Configuração:**
+```json
+{
+  "To": "destinatario@exemplo.com",
+  "Subject": "Assunto do email",
+  "Body": "Corpo do email",
+  "Cc": "copia@exemplo.com",
+  "Bcc": "copiaoculta@exemplo.com"
+}
+```
+
+### DelayStep
+Introduz um delay na execução.
+
+**Configuração:**
+```json
+{
+  "DelaySeconds": 5
+}
+```
+
+## Estrutura de Dados
+
+### Workflow Definition
+Define a estrutura de um workflow com seus steps.
+
+### Workflow Execution
+Representa uma instância de execução de um workflow.
+
+### Step Execution
+Representa a execução de um step específico dentro de um workflow.
+
+## Estados
+
+### Workflow Execution Status
+- `Pending`: Aguardando execução
+- `Running`: Em execução
+- `Completed`: Concluído com sucesso
+- `Failed`: Falhou
+- `Cancelled`: Cancelado
+- `Paused`: Pausado
+
+### Step Execution Status
+- `Pending`: Aguardando execução
+- `Running`: Em execução
+- `Completed`: Concluído com sucesso
+- `Failed`: Falhou
+- `Skipped`: Pulado (condições não atendidas)
+- `Retrying`: Tentando novamente
+
+## Monitoramento
+
+### Hangfire Dashboard
+Acesse `http://localhost:5000/hangfire` para:
+- Visualizar jobs em execução
+- Ver estatísticas de jobs
+- Reprocessar jobs falhados
+- Ver logs detalhados
+
+### Logs
+A aplicação gera logs detalhados sobre:
+- Início e fim de workflows
+- Execução de steps
+- Erros e retries
+- Estado das execuções
+
+## Desenvolvimento
+
+### Criando Novos Steps
+
+1. Implemente a interface `IWorkflowStep`:
+
+```csharp
+public class MeuCustomStep : IWorkflowStep
+{
+    public string StepType => "MeuCustomStep";
+    
+    public async Task<StepResult> ExecuteAsync(StepContext context, CancellationToken cancellationToken = default)
+    {
+        // Sua lógica aqui
+        return StepResult.Success();
+    }
+    
+    public async Task<bool> CanExecuteAsync(StepContext context, CancellationToken cancellationToken = default)
+    {
+        // Lógica de condições
+        return true;
+    }
+    
+    public async Task<StepResult> ValidateInputAsync(StepContext context, CancellationToken cancellationToken = default)
+    {
+        // Validação de entrada
+        return StepResult.Success();
+    }
+}
+```
+
+2. Registre no `Program.cs`:
+
+```csharp
+builder.Services.AddScoped<MeuCustomStep>();
+```
+
+### Testando
+
+```bash
+# Executar testes (se existirem)
+dotnet test
+
+# Build de produção
+dotnet build --configuration Release
+```
+
+## Deployment
+
+### Docker
+
+Crie um `Dockerfile` para a API:
+
+```dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 80
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY . .
+RUN dotnet restore
+RUN dotnet build --configuration Release
+
+FROM build AS publish
+RUN dotnet publish -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "WorkflowEngine.Api.dll"]
+```
+
+### Variáveis de Ambiente
+
+```bash
+CONNECTIONSTRINGS__DEFAULTCONNECTION="Host=postgres;Database=workflowengine;Username=workflow;Password=workflow123"
+ASPNETCORE_ENVIRONMENT=Production
+```
+
+## Troubleshooting
+
+### Problemas Comuns
+
+1. **Erro de conexão com PostgreSQL**
+   - Verifique se o PostgreSQL está rodando
+   - Confirme a string de conexão
+   - Verifique as credenciais
+
+2. **Jobs não executam**
+   - Verifique se o Hangfire está configurado corretamente
+   - Confirme se o banco de dados do Hangfire foi criado
+   - Verifique os logs da aplicação
+
+3. **Steps não são encontrados**
+   - Confirme se os steps estão registrados no DI container
+   - Verifique se o nome do step type está correto
+
+### Logs
+
+Para debuggar problemas, ajuste o nível de log em `appsettings.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "WorkflowEngine": "Debug",
+      "Hangfire": "Information"
+    }
+  }
+}
+```
+
+## Contribuição
+
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+## Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+
 # Sistema de Workflow Engine
 
 Um sistema completo de workflow engine construído com .NET 8, Entity Framework Core e Hangfire.

@@ -1,10 +1,12 @@
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using WorkflowEngine.Core.Interfaces;
 using WorkflowEngine.Core.Services;
 using WorkflowEngine.Core.Steps;
 using WorkflowEngine.Core.Data;
+using WorkflowEngine.Api.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,8 +61,19 @@ builder.Services.AddHangfire(configuration =>
 
 builder.Services.AddHangfireServer();
 
+// Add SignalR
+builder.Services.AddSignalR();
+
 // Add Workflow Engine services
 builder.Services.AddScoped<IWorkflowEngine, WorkflowEngine.Core.Services.WorkflowEngine>();
+
+// Register MonitoringNotificationService with proper SignalR dependencies
+builder.Services.AddScoped<IMonitoringNotificationService>(provider =>
+{
+    var logger = provider.GetRequiredService<ILogger<MonitoringNotificationService>>();
+    var hubContext = provider.GetService<IHubContext<MonitoringHub>>();
+    return new MonitoringNotificationService(logger, hubContext);
+});
 
 // Register workflow steps
 builder.Services.AddScoped<EmailStep>();
@@ -94,5 +107,8 @@ app.UseAuthorization();
 app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
+
+// Map SignalR Hub
+app.MapHub<MonitoringHub>("/monitoring-hub");
 
 app.Run();

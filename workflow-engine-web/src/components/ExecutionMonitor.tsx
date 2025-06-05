@@ -35,27 +35,26 @@ import {
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import {
-  WorkflowExecution,
-  StepExecution,
   WorkflowExecutionStatus,
   StepExecutionStatus,
 } from '../types/workflow';
-import { workflowApi } from '../services/api';
+import { workflowApi, monitoringApi } from '../services/api';
+import { ExecutionListResponse, ExecutionSummary } from '../types/monitoring';
 
 const ExecutionMonitor: React.FC = () => {
-  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
+  const [executions, setExecutions] = useState<ExecutionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedExecution, setSelectedExecution] = useState<WorkflowExecution | null>(null);
-  const [stepExecutions, setStepExecutions] = useState<StepExecution[]>([]);
+  const [selectedExecution, setSelectedExecution] = useState<ExecutionSummary | null>(null);
+  const [executionLogs, setExecutionLogs] = useState<any>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const loadExecutions = async () => {
     try {
       setError(null);
-      const data = await workflowApi.getExecutions();
-      setExecutions(data);
+      const data = await monitoringApi.getExecutions();
+      setExecutions(data.executions || []);
     } catch (err) {
       setError('Erro ao carregar execuções');
       console.error('Erro ao carregar execuções:', err);
@@ -64,16 +63,16 @@ const ExecutionMonitor: React.FC = () => {
     }
   };
 
-  const loadStepExecutions = async (executionId: string) => {
+  const loadExecutionLogs = async (executionId: string) => {
     try {
-      const steps = await workflowApi.getStepExecutions(executionId);
-      setStepExecutions(steps);
+      const logs = await monitoringApi.getExecutionLogs(executionId);
+      setExecutionLogs(logs);
     } catch (err) {
-      console.error('Erro ao carregar steps da execução:', err);
+      console.error('Erro ao carregar logs da execução:', err);
     }
   };
 
-  const handlePauseExecution = async (execution: WorkflowExecution) => {
+  const handlePauseExecution = async (execution: ExecutionSummary) => {
     try {
       await workflowApi.pauseExecution(execution.id);
       await loadExecutions();
@@ -83,7 +82,7 @@ const ExecutionMonitor: React.FC = () => {
     }
   };
 
-  const handleResumeExecution = async (execution: WorkflowExecution) => {
+  const handleResumeExecution = async (execution: ExecutionSummary) => {
     try {
       await workflowApi.resumeExecution(execution.id);
       await loadExecutions();
@@ -93,7 +92,7 @@ const ExecutionMonitor: React.FC = () => {
     }
   };
 
-  const handleCancelExecution = async (execution: WorkflowExecution) => {
+  const handleCancelExecution = async (execution: ExecutionSummary) => {
     if (window.confirm('Tem certeza que deseja cancelar esta execução?')) {
       try {
         await workflowApi.cancelExecution(execution.id);
@@ -105,9 +104,9 @@ const ExecutionMonitor: React.FC = () => {
     }
   };
 
-  const handleViewDetails = async (execution: WorkflowExecution) => {
+  const handleViewDetails = async (execution: ExecutionSummary) => {
     setSelectedExecution(execution);
-    await loadStepExecutions(execution.id);
+    await loadExecutionLogs(execution.id);
     setDetailsDialogOpen(true);
   };
 
@@ -167,10 +166,9 @@ const ExecutionMonitor: React.FC = () => {
     return `${Math.floor(diffSecs / 3600)}h ${Math.floor((diffSecs % 3600) / 60)}m`;
   };
 
-  const getExecutionProgress = (execution: WorkflowExecution) => {
-    if (!execution.currentStep) return 0;
-    // Assumindo que temos informação sobre o total de steps (precisa ser adicionado ao backend)
-    return (execution.currentStep / 4) * 100; // Exemplo com 4 steps
+  const getExecutionProgress = (execution: ExecutionSummary) => {
+    if (execution.totalSteps === 0) return 0;
+    return (execution.completedSteps / execution.totalSteps) * 100;
   };
 
   if (loading) {
@@ -262,13 +260,13 @@ const ExecutionMonitor: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {execution.workflowDefinitionId.substring(0, 8)}...
+                      {execution.workflowName}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Chip
                       label={execution.status}
-                      color={getStatusColor(execution.status) as any}
+                      color={getStatusColor(execution.status as WorkflowExecutionStatus) as any}
                       size="small"
                     />
                   </TableCell>
@@ -277,21 +275,21 @@ const ExecutionMonitor: React.FC = () => {
                       <LinearProgress
                         variant="determinate"
                         value={getExecutionProgress(execution)}
-                        color={getStatusColor(execution.status) as any}
+                        color={getStatusColor(execution.status as WorkflowExecutionStatus) as any}
                       />
                       <Typography variant="caption" color="text.secondary">
-                        Step {execution.currentStep || 0}
+                        {execution.completedSteps}/{execution.totalSteps}
                       </Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {formatDate(execution.startedAt)}
+                      {formatDate(execution.startedTime)}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {formatDuration(execution.startedAt, execution.completedAt)}
+                      {formatDuration(execution.startedTime, execution.completedTime)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
@@ -354,38 +352,48 @@ const ExecutionMonitor: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          Detalhes da Execução: {selectedExecution?.id}
+          Detalhes da Execução: {selectedExecution?.id.substring(0, 8)}...
         </DialogTitle>
         <DialogContent>
-          {selectedExecution && (
+          {selectedExecution && executionLogs && (
             <Box>
               <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid size={6}>
+                <Grid size={{ xs:6 }}>
                   <Typography variant="subtitle2">Status:</Typography>
                   <Chip
-                    label={selectedExecution.status}
-                    color={getStatusColor(selectedExecution.status) as any}
+                    label={executionLogs.status}
+                    color={getStatusColor(executionLogs.status) as any}
                     sx={{ mt: 0.5 }}
                   />
                 </Grid>
-                <Grid size={6}>
+                <Grid size={{ xs:6 }}>
                   <Typography variant="subtitle2">Duração:</Typography>
                   <Typography variant="body2">
-                    {formatDuration(selectedExecution.startedAt, selectedExecution.completedAt)}
+                    {formatDuration(executionLogs.startedTime, executionLogs.completedTime)}
                   </Typography>
                 </Grid>
               </Grid>
 
               <Accordion defaultExpanded>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="h6">Dados de Entrada</Typography>
+                  <Typography variant="h6">Informações da Execução</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                    <pre style={{ margin: 0, fontSize: '0.875rem' }}>
-                      {JSON.stringify(selectedExecution.inputData, null, 2)}
-                    </pre>
-                  </Paper>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs:6 }}>
+                      <Typography variant="subtitle2">Workflow:</Typography>
+                      <Typography variant="body2">{executionLogs.workflowName}</Typography>
+                    </Grid>
+                    <Grid size={{ xs:6 }}>
+                      <Typography variant="subtitle2">Criado em:</Typography>
+                      <Typography variant="body2">{formatDate(executionLogs.createdAt)}</Typography>
+                    </Grid>
+                  </Grid>
+                  {executionLogs.errorMessage && (
+                    <Alert severity="error" sx={{ mt: 2 }}>
+                      {executionLogs.errorMessage}
+                    </Alert>
+                  )}
                 </AccordionDetails>
               </Accordion>
 
@@ -398,17 +406,21 @@ const ExecutionMonitor: React.FC = () => {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Step</TableCell>
+                          <TableCell>Order</TableCell>
+                          <TableCell>Nome</TableCell>
+                          <TableCell>Tipo</TableCell>
                           <TableCell>Status</TableCell>
                           <TableCell>Iniciado</TableCell>
                           <TableCell>Concluído</TableCell>
-                          <TableCell>Duração</TableCell>
+                          <TableCell>Retries</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {stepExecutions.map((step, index) => (
-                          <TableRow key={step.id}>
-                            <TableCell>{index + 1}</TableCell>
+                        {executionLogs.steps.map((step: any) => (
+                          <TableRow key={step.stepId}>
+                            <TableCell>{step.order}</TableCell>
+                            <TableCell>{step.stepName}</TableCell>
+                            <TableCell>{step.stepType}</TableCell>
                             <TableCell>
                               <Chip
                                 label={step.status}
@@ -416,11 +428,9 @@ const ExecutionMonitor: React.FC = () => {
                                 size="small"
                               />
                             </TableCell>
-                            <TableCell>{formatDate(step.startedAt)}</TableCell>
-                            <TableCell>{formatDate(step.completedAt)}</TableCell>
-                            <TableCell>
-                              {formatDuration(step.startedAt, step.completedAt)}
-                            </TableCell>
+                            <TableCell>{formatDate(step.startedTime)}</TableCell>
+                            <TableCell>{formatDate(step.completedTime)}</TableCell>
+                            <TableCell>{step.retryCount}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -429,7 +439,7 @@ const ExecutionMonitor: React.FC = () => {
                 </AccordionDetails>
               </Accordion>
 
-              {selectedExecution.outputData && (
+              {executionLogs.outputData && (
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Typography variant="h6">Dados de Saída</Typography>
@@ -437,21 +447,21 @@ const ExecutionMonitor: React.FC = () => {
                   <AccordionDetails>
                     <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
                       <pre style={{ margin: 0, fontSize: '0.875rem' }}>
-                        {JSON.stringify(selectedExecution.outputData, null, 2)}
+                        {JSON.stringify(executionLogs.outputData, null, 2)}
                       </pre>
                     </Paper>
                   </AccordionDetails>
                 </Accordion>
               )}
 
-              {selectedExecution.error && (
+              {selectedExecution.errorMessage && (
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Typography variant="h6" color="error">Erro</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <Alert severity="error">
-                      {selectedExecution.error}
+                      {selectedExecution.errorMessage}
                     </Alert>
                   </AccordionDetails>
                 </Accordion>
