@@ -5,15 +5,8 @@ using WorkflowEngine.Core.Models;
 
 namespace WorkflowEngine.Core.Steps;
 
-public class DelayStep : IWorkflowStep
+public class DelayStep(ILogger<DelayStep> logger) : IWorkflowStep
 {
-    private readonly ILogger<DelayStep> _logger;
-
-    public DelayStep(ILogger<DelayStep> logger)
-    {
-        _logger = logger;
-    }
-
     public string StepType => "DelayStep";
 
     public async Task<StepResult> ExecuteAsync(StepContext context, CancellationToken cancellationToken = default)
@@ -22,7 +15,7 @@ public class DelayStep : IWorkflowStep
         {
             var config = ExtractConfiguration(context.Configuration);
             
-            _logger.LogInformation("Delaying for {DelaySeconds} seconds", config.DelaySeconds);
+            logger.LogInformation("Delaying for {DelaySeconds} seconds", config.DelaySeconds);
 
             await Task.Delay(TimeSpan.FromSeconds(config.DelaySeconds), cancellationToken);
 
@@ -33,18 +26,18 @@ public class DelayStep : IWorkflowStep
                 CompletedAt = DateTime.UtcNow
             };
 
-            _logger.LogInformation("Delay of {DelaySeconds} seconds completed", config.DelaySeconds);
+            logger.LogInformation("Delay of {DelaySeconds} seconds completed", config.DelaySeconds);
             
             return StepResult.Success(result);
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("Delay step was cancelled");
+            logger.LogWarning("Delay step was cancelled");
             return StepResult.Failure("Delay was cancelled");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute delay step");
+            logger.LogError(ex, "Failed to execute delay step");
             return StepResult.Failure(ex.Message);
         }
     }

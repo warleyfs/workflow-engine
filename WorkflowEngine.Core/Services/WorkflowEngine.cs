@@ -10,35 +10,21 @@ using WorkflowEngine.Core.Data;
 
 namespace WorkflowEngine.Core.Services;
 
-public class WorkflowEngine : IWorkflowEngine
+public class WorkflowEngine(
+    WorkflowDbContext context,
+    IServiceProvider serviceProvider,
+    ILogger<WorkflowEngine> logger,
+    IBackgroundJobClient backgroundJobClient,
+    IMonitoringNotificationService? notificationService = null)
+    : IWorkflowEngine
 {
-    private readonly WorkflowDbContext _context;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<WorkflowEngine> _logger;
-    private readonly IBackgroundJobClient _backgroundJobClient;
-    private readonly IMonitoringNotificationService? _notificationService;
-
-    public WorkflowEngine(
-        WorkflowDbContext context,
-        IServiceProvider serviceProvider,
-        ILogger<WorkflowEngine> logger,
-        IBackgroundJobClient backgroundJobClient,
-        IMonitoringNotificationService? notificationService = null)
-    {
-        _context = context;
-        _serviceProvider = serviceProvider;
-        _logger = logger;
-        _backgroundJobClient = backgroundJobClient;
-        _notificationService = notificationService;
-    }
-
     public async Task<Guid> StartWorkflowAsync(
         Guid workflowDefinitionId,
         object? inputData = null,
         DateTime? scheduledTime = null,
         CancellationToken cancellationToken = default)
     {
-        var workflowDefinition = await _context.WorkflowDefinitions
+        var workflowDefinition = await context.WorkflowDefinitions
             .Include(w => w.Steps)
             .ThenInclude(s => s.StepDefinition)
             .FirstOrDefaultAsync(w => w.Id == workflowDefinitionId && w.IsActive, cancellationToken);
@@ -54,8 +40,8 @@ public class WorkflowEngine : IWorkflowEngine
             Status = scheduledTime.HasValue ? WorkflowExecutionStatus.Pending : WorkflowExecutionStatus.Running
         };
 
-        _context.WorkflowExecutions.Add(workflowExecution);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.WorkflowExecutions.Add(workflowExecution);
+        await context.SaveChangesAsync(cancellationToken);
 
         // Create step executions
         var stepExecutions = workflowDefinition.Steps
@@ -69,29 +55,29 @@ public class WorkflowEngine : IWorkflowEngine
             })
             .ToList();
 
-        _context.StepExecutions.AddRange(stepExecutions);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.StepExecutions.AddRange(stepExecutions);
+        await context.SaveChangesAsync(cancellationToken);
 
         // Schedule workflow execution
         if (scheduledTime.HasValue)
         {
-            _backgroundJobClient.Schedule(
+            backgroundJobClient.Schedule(
                 () => ProcessWorkflowAsync(workflowExecution.Id, CancellationToken.None),
                 scheduledTime.Value);
         }
         else
         {
-            _backgroundJobClient.Enqueue(
+            backgroundJobClient.Enqueue(
                 () => ProcessWorkflowAsync(workflowExecution.Id, CancellationToken.None));
         }
 
-        _logger.LogInformation("Started workflow {WorkflowId} execution {ExecutionId}",
+        logger.LogInformation("Started workflow {WorkflowId} execution {ExecutionId}",
             workflowDefinitionId, workflowExecution.Id);
 
         // Notify about new execution
-        if (_notificationService != null)
+        if (notificationService != null)
         {
-            await _notificationService.NotifyNewExecutionStarted(workflowExecution);
+            await notificationService.NotifyNewExecutionStarted(workflowExecution);
         }
 
         return workflowExecution.Id;
@@ -101,7 +87,7 @@ public class WorkflowEngine : IWorkflowEngine
         Guid workflowExecutionId,
         CancellationToken cancellationToken = default)
     {
-        var execution = await _context.WorkflowExecutions
+        var execution = await context.WorkflowExecutions
             .Include(e => e.WorkflowDefinition)
             .Include(e => e.StepExecutions)
             .ThenInclude(se => se.WorkflowStep)
@@ -153,7 +139,7 @@ public class WorkflowEngine : IWorkflowEngine
         Guid workflowExecutionId,
         CancellationToken cancellationToken = default)
     {
-        var execution = await _context.WorkflowExecutions
+        var execution = await context.WorkflowExecutions
             .FirstOrDefaultAsync(e => e.Id == workflowExecutionId, cancellationToken);
 
         if (execution == null || execution.Status == WorkflowExecutionStatus.Completed ||
@@ -164,15 +150,15 @@ public class WorkflowEngine : IWorkflowEngine
         execution.Status = WorkflowExecutionStatus.Cancelled;
         execution.CompletedTime = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
         // Notify status change
-        if (_notificationService != null)
+        if (notificationService != null)
         {
-            await _notificationService.NotifyWorkflowExecutionStatusChanged(execution);
+            await notificationService.NotifyWorkflowExecutionStatusChanged(execution);
         }
 
-        _logger.LogInformation("Cancelled workflow execution {ExecutionId}", workflowExecutionId);
+        logger.LogInformation("Cancelled workflow execution {ExecutionId}", workflowExecutionId);
         return true;
     }
 
@@ -180,16 +166,16 @@ public class WorkflowEngine : IWorkflowEngine
         Guid workflowExecutionId,
         CancellationToken cancellationToken = default)
     {
-        var execution = await _context.WorkflowExecutions
+        var execution = await context.WorkflowExecutions
             .FirstOrDefaultAsync(e => e.Id == workflowExecutionId, cancellationToken);
 
         if (execution == null || execution.Status != WorkflowExecutionStatus.Running)
             return false;
 
         execution.Status = WorkflowExecutionStatus.Paused;
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Paused workflow execution {ExecutionId}", workflowExecutionId);
+        logger.LogInformation("Paused workflow execution {ExecutionId}", workflowExecutionId);
         return true;
     }
 
@@ -197,19 +183,19 @@ public class WorkflowEngine : IWorkflowEngine
         Guid workflowExecutionId,
         CancellationToken cancellationToken = default)
     {
-        var execution = await _context.WorkflowExecutions
+        var execution = await context.WorkflowExecutions
             .FirstOrDefaultAsync(e => e.Id == workflowExecutionId, cancellationToken);
 
         if (execution == null || execution.Status != WorkflowExecutionStatus.Paused)
             return false;
 
         execution.Status = WorkflowExecutionStatus.Running;
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
-        _backgroundJobClient.Enqueue(
+        backgroundJobClient.Enqueue(
             () => ProcessWorkflowAsync(workflowExecutionId, CancellationToken.None));
 
-        _logger.LogInformation("Resumed workflow execution {ExecutionId}", workflowExecutionId);
+        logger.LogInformation("Resumed workflow execution {ExecutionId}", workflowExecutionId);
         return true;
     }
 
@@ -217,7 +203,7 @@ public class WorkflowEngine : IWorkflowEngine
         Guid workflowExecutionId,
         CancellationToken cancellationToken = default)
     {
-        var execution = await _context.WorkflowExecutions
+        var execution = await context.WorkflowExecutions
             .Include(e => e.WorkflowDefinition)
             .Include(e => e.StepExecutions)
             .ThenInclude(se => se.WorkflowStep)
@@ -226,7 +212,7 @@ public class WorkflowEngine : IWorkflowEngine
 
         if (execution == null)
         {
-            _logger.LogError("Workflow execution {ExecutionId} not found", workflowExecutionId);
+            logger.LogError("Workflow execution {ExecutionId} not found", workflowExecutionId);
             return;
         }
 
@@ -234,14 +220,14 @@ public class WorkflowEngine : IWorkflowEngine
             execution.Status == WorkflowExecutionStatus.Completed ||
             execution.Status == WorkflowExecutionStatus.Failed)
         {
-            _logger.LogInformation("Workflow execution {ExecutionId} is already in final state: {Status}",
+            logger.LogInformation("Workflow execution {ExecutionId} is already in final state: {Status}",
                 workflowExecutionId, execution.Status);
             return;
         }
 
         if (execution.Status == WorkflowExecutionStatus.Paused)
         {
-            _logger.LogInformation("Workflow execution {ExecutionId} is paused", workflowExecutionId);
+            logger.LogInformation("Workflow execution {ExecutionId} is paused", workflowExecutionId);
             return;
         }
 
@@ -252,10 +238,10 @@ public class WorkflowEngine : IWorkflowEngine
             {
                 execution.Status = WorkflowExecutionStatus.Running;
                 execution.StartedTime = DateTime.UtcNow;
-                await _context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
             }
 
-            _logger.LogInformation("Processing workflow execution {ExecutionId}", workflowExecutionId);
+            logger.LogInformation("Processing workflow execution {ExecutionId}", workflowExecutionId);
 
             // Get next pending step
             var pendingStep = execution.StepExecutions
@@ -288,16 +274,16 @@ public class WorkflowEngine : IWorkflowEngine
                     
                     execution.OutputData = JsonSerializer.Serialize(outputData);
                     
-                    await _context.SaveChangesAsync(cancellationToken);
+                    await context.SaveChangesAsync(cancellationToken);
                     
                     // Notify completion
-                    if (_notificationService != null)
+                    if (notificationService != null)
                     {
-                        await _notificationService.NotifyExecutionCompleted(execution);
-                        await _notificationService.NotifyWorkflowExecutionStatusChanged(execution);
+                        await notificationService.NotifyExecutionCompleted(execution);
+                        await notificationService.NotifyWorkflowExecutionStatusChanged(execution);
                     }
                     
-                    _logger.LogInformation("Workflow execution {ExecutionId} completed successfully", workflowExecutionId);
+                    logger.LogInformation("Workflow execution {ExecutionId} completed successfully", workflowExecutionId);
                 }
                 else
                 {
@@ -309,9 +295,9 @@ public class WorkflowEngine : IWorkflowEngine
                         execution.CompletedTime = DateTime.UtcNow;
                         execution.ErrorMessage = $"Step(s) failed: {string.Join(", ", failedSteps.Select(s => s.WorkflowStep.StepDefinition.Name))}";
                         
-                        await _context.SaveChangesAsync(cancellationToken);
+                        await context.SaveChangesAsync(cancellationToken);
                         
-                        _logger.LogError("Workflow execution {ExecutionId} failed: {ErrorMessage}", 
+                        logger.LogError("Workflow execution {ExecutionId} failed: {ErrorMessage}", 
                             workflowExecutionId, execution.ErrorMessage);
                     }
                 }
@@ -322,11 +308,11 @@ public class WorkflowEngine : IWorkflowEngine
             if (pendingStep.ScheduledTime.HasValue && pendingStep.ScheduledTime.Value > DateTime.UtcNow)
             {
                 // Reschedule the step for later
-                _backgroundJobClient.Schedule(
+                backgroundJobClient.Schedule(
                     () => ProcessStepAsync(pendingStep.Id, CancellationToken.None),
                     pendingStep.ScheduledTime.Value);
                 
-                _logger.LogInformation("Step {StepId} scheduled for {ScheduledTime}", 
+                logger.LogInformation("Step {StepId} scheduled for {ScheduledTime}", 
                     pendingStep.Id, pendingStep.ScheduledTime.Value);
                 return;
             }
@@ -335,18 +321,18 @@ public class WorkflowEngine : IWorkflowEngine
             await ProcessStepAsync(pendingStep.Id, cancellationToken);
 
             // Continue processing next steps if available
-            _backgroundJobClient.Enqueue(
+            backgroundJobClient.Enqueue(
                 () => ProcessWorkflowAsync(workflowExecutionId, CancellationToken.None));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing workflow execution {ExecutionId}", workflowExecutionId);
+            logger.LogError(ex, "Error processing workflow execution {ExecutionId}", workflowExecutionId);
             
             execution.Status = WorkflowExecutionStatus.Failed;
             execution.CompletedTime = DateTime.UtcNow;
             execution.ErrorMessage = ex.Message;
             
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -354,7 +340,7 @@ public class WorkflowEngine : IWorkflowEngine
         Guid stepExecutionId,
         CancellationToken cancellationToken = default)
     {
-        var stepExecution = await _context.StepExecutions
+        var stepExecution = await context.StepExecutions
             .Include(se => se.WorkflowExecution)
             .Include(se => se.WorkflowStep)
             .ThenInclude(ws => ws.StepDefinition)
@@ -362,13 +348,13 @@ public class WorkflowEngine : IWorkflowEngine
 
         if (stepExecution == null)
         {
-            _logger.LogError("Step execution {StepExecutionId} not found", stepExecutionId);
+            logger.LogError("Step execution {StepExecutionId} not found", stepExecutionId);
             return;
         }
 
         if (stepExecution.Status != StepExecutionStatus.Pending && stepExecution.Status != StepExecutionStatus.Retrying)
         {
-            _logger.LogInformation("Step execution {StepExecutionId} is not in pending/retrying state: {Status}",
+            logger.LogInformation("Step execution {StepExecutionId} is not in pending/retrying state: {Status}",
                 stepExecutionId, stepExecution.Status);
             return;
         }
@@ -376,20 +362,20 @@ public class WorkflowEngine : IWorkflowEngine
         if (stepExecution.WorkflowExecution.Status == WorkflowExecutionStatus.Cancelled ||
             stepExecution.WorkflowExecution.Status == WorkflowExecutionStatus.Paused)
         {
-            _logger.LogInformation("Workflow is {Status}, skipping step execution {StepExecutionId}",
+            logger.LogInformation("Workflow is {Status}, skipping step execution {StepExecutionId}",
                 stepExecution.WorkflowExecution.Status, stepExecutionId);
             return;
         }
 
         try
         {
-            _logger.LogInformation("Processing step execution {StepExecutionId} - {StepName}",
+            logger.LogInformation("Processing step execution {StepExecutionId} - {StepName}",
                 stepExecutionId, stepExecution.WorkflowStep.StepDefinition.Name);
 
             // Update step status to running
             stepExecution.Status = StepExecutionStatus.Running;
             stepExecution.StartedTime = DateTime.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             // Get the step implementation
             var stepType = GetStepTypeFromAssemblies(stepExecution.WorkflowStep.StepDefinition.StepType);
@@ -398,7 +384,7 @@ public class WorkflowEngine : IWorkflowEngine
                 throw new InvalidOperationException($"Step type '{stepExecution.WorkflowStep.StepDefinition.StepType}' not found");
             }
 
-            var stepInstance = _serviceProvider.GetService(stepType) as IWorkflowStep;
+            var stepInstance = serviceProvider.GetService(stepType) as IWorkflowStep;
             if (stepInstance == null)
             {
                 throw new InvalidOperationException($"Could not create instance of step type '{stepType.Name}'");
@@ -415,9 +401,9 @@ public class WorkflowEngine : IWorkflowEngine
                 stepExecution.Status = StepExecutionStatus.Failed;
                 stepExecution.CompletedTime = DateTime.UtcNow;
                 stepExecution.ErrorMessage = $"Input validation failed: {validationResult.ErrorMessage}";
-                await _context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
                 
-                _logger.LogError("Step execution {StepExecutionId} failed validation: {ErrorMessage}",
+                logger.LogError("Step execution {StepExecutionId} failed validation: {ErrorMessage}",
                     stepExecutionId, validationResult.ErrorMessage);
                 return;
             }
@@ -429,9 +415,9 @@ public class WorkflowEngine : IWorkflowEngine
                 stepExecution.Status = StepExecutionStatus.Skipped;
                 stepExecution.CompletedTime = DateTime.UtcNow;
                 stepExecution.ErrorMessage = "Step conditions not met";
-                await _context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
                 
-                _logger.LogInformation("Step execution {StepExecutionId} skipped - conditions not met", stepExecutionId);
+                logger.LogInformation("Step execution {StepExecutionId} skipped - conditions not met", stepExecutionId);
                 return;
             }
 
@@ -444,7 +430,7 @@ public class WorkflowEngine : IWorkflowEngine
                 stepExecution.CompletedTime = DateTime.UtcNow;
                 stepExecution.OutputData = result.OutputData?.RootElement.GetRawText();
                 
-                _logger.LogInformation("Step execution {StepExecutionId} completed successfully", stepExecutionId);
+                logger.LogInformation("Step execution {StepExecutionId} completed successfully", stepExecutionId);
             }
             else
             {
@@ -458,14 +444,14 @@ public class WorkflowEngine : IWorkflowEngine
                     var retryDelay = result.RetryDelay ?? TimeSpan.FromMinutes(Math.Pow(2, stepExecution.RetryCount)); // Exponential backoff
                     stepExecution.ScheduledTime = DateTime.UtcNow.Add(retryDelay);
                     
-                    await _context.SaveChangesAsync(cancellationToken);
+                    await context.SaveChangesAsync(cancellationToken);
                     
                     // Schedule retry
-                    _backgroundJobClient.Schedule(
+                    backgroundJobClient.Schedule(
                         () => ProcessStepAsync(stepExecutionId, CancellationToken.None),
                         stepExecution.ScheduledTime.Value);
                     
-                    _logger.LogWarning("Step execution {StepExecutionId} failed, scheduled for retry {RetryCount}/{MaxRetries} at {ScheduledTime}: {ErrorMessage}",
+                    logger.LogWarning("Step execution {StepExecutionId} failed, scheduled for retry {RetryCount}/{MaxRetries} at {ScheduledTime}: {ErrorMessage}",
                         stepExecutionId, stepExecution.RetryCount, stepExecution.MaxRetries, stepExecution.ScheduledTime, result.ErrorMessage);
                 }
                 else
@@ -474,22 +460,22 @@ public class WorkflowEngine : IWorkflowEngine
                     stepExecution.CompletedTime = DateTime.UtcNow;
                     stepExecution.ErrorMessage = result.ErrorMessage;
                     
-                    _logger.LogError("Step execution {StepExecutionId} failed permanently after {RetryCount} retries: {ErrorMessage}",
+                    logger.LogError("Step execution {StepExecutionId} failed permanently after {RetryCount} retries: {ErrorMessage}",
                         stepExecutionId, stepExecution.RetryCount, result.ErrorMessage);
                 }
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing step execution {StepExecutionId}", stepExecutionId);
+            logger.LogError(ex, "Error processing step execution {StepExecutionId}", stepExecutionId);
             
             stepExecution.Status = StepExecutionStatus.Failed;
             stepExecution.CompletedTime = DateTime.UtcNow;
             stepExecution.ErrorMessage = ex.Message;
             
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -531,7 +517,7 @@ public class WorkflowEngine : IWorkflowEngine
         }
         
         // Add outputs from previous completed steps
-        var previousSteps = await _context.StepExecutions
+        var previousSteps = await context.StepExecutions
             .Include(se => se.WorkflowStep)
             .ThenInclude(ws => ws.StepDefinition)
             .Where(se => se.WorkflowExecutionId == stepExecution.WorkflowExecutionId &&

@@ -178,6 +178,61 @@ public class WorkflowController : ControllerBase
     }
 
     /// <summary>
+    /// Criar definição de workflow
+    /// </summary>
+    /// <param name="workflow"></param>
+    /// <returns></returns>
+    [HttpPost("definitions")]
+    public async Task<ActionResult<Guid>> CreateWorkflowDefinition(WorkflowDefinitionModel workflow)
+    {
+        try
+        {
+            // Cria as definições das steps
+            var stepDefs = workflow.Steps.Select(s => new StepDefinition()
+            {
+                Name = s.Name,
+                StepType = s.StepType,
+                Description = s.Description,
+                Configuration = JsonSerializer.Serialize(s.Configuration),
+            }).ToArray();
+            
+            await _context.StepDefinitions.AddRangeAsync(stepDefs);
+            await _context.SaveChangesAsync();
+            
+            // Criar workflow
+            var workflowDef = new WorkflowDefinition
+            {
+                Name = workflow.Name,
+                Description = workflow.Description,
+            };
+
+            _context.WorkflowDefinitions.Add(workflowDef);
+            await _context.SaveChangesAsync();
+            
+            // Criar etapas do workflow
+            for (var i = 0; i < stepDefs.Length; i++)
+            {
+                _context.WorkflowSteps.AddRange(new WorkflowStep
+                {
+                    WorkflowDefinitionId = workflowDef.Id,
+                    StepDefinitionId = stepDefs[i].Id,
+                    Order = i,
+                    DelayMinutes = 0
+                });    
+            }
+            
+            await _context.SaveChangesAsync();
+
+            return Ok(new { WorkflowDefinitionId = workflowDef.Id, Message = "Workflow de demonstração criado com sucesso!" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ocorreu um erro ao criar o workflow.");
+            return StatusCode(500, "Ocorreu um erro inexperado");
+        }
+    }
+    
+    /// <summary>
     /// Criar uma nova definição de workflow simples para demonstração
     /// </summary>
     [HttpPost("demo")]
@@ -188,39 +243,39 @@ public class WorkflowController : ControllerBase
             // Criar etapas de definição
             var logStepDef = new StepDefinition
             {
-                Name = "Log Start",
+                Name = "Logar Início",
                 StepType = "LogStep",
-                Description = "Log the start of the workflow",
+                Description = "Grava um log com o início do workflow",
                 Configuration = JsonSerializer.Serialize(new { Message = "Workflow started!", Level = "Information" })
             };
 
             var delayStepDef = new StepDefinition
             {
-                Name = "Wait 5 seconds",
+                Name = "Aguardar 5 minutos",
                 StepType = "DelayStep",
-                Description = "Wait for 5 seconds",
-                Configuration = JsonSerializer.Serialize(new { DelaySeconds = 5 })
+                Description = "Aguardar 5 minutos",
+                Configuration = JsonSerializer.Serialize(new { DelaySeconds = (5 * 60) })
             };
 
             var emailStepDef = new StepDefinition
             {
-                Name = "Send notification",
+                Name = "Enviar Email",
                 StepType = "EmailStep",
-                Description = "Send notification email",
+                Description = "Enviar email de notificação",
                 Configuration = JsonSerializer.Serialize(new 
                 { 
                     To = "user@example.com", 
-                    Subject = "Workflow Completed", 
-                    Body = "Your workflow has been completed successfully!" 
+                    Subject = "Workflow Finalizado", 
+                    Body = "Seu workflow finalizou com sucesso!" 
                 })
             };
 
             var logEndStepDef = new StepDefinition
             {
-                Name = "Log End",
+                Name = "Logar Finalização",
                 StepType = "LogStep",
-                Description = "Log the end of the workflow",
-                Configuration = JsonSerializer.Serialize(new { Message = "Workflow completed!", Level = "Information" })
+                Description = "Grava log com a finalização do workflow",
+                Configuration = JsonSerializer.Serialize(new { Message = "Workflow finalizado!", Level = "Information" })
             };
 
             _context.StepDefinitions.AddRange(logStepDef, delayStepDef, emailStepDef, logEndStepDef);
@@ -230,7 +285,7 @@ public class WorkflowController : ControllerBase
             var workflowDef = new WorkflowDefinition
             {
                 Name = "Demo Workflow",
-                Description = "A demonstration workflow with log, delay, and email steps"
+                Description = "Um workflow de demonstração com etapas de log, delay e envio de email."
             };
 
             _context.WorkflowDefinitions.Add(workflowDef);
@@ -272,12 +327,12 @@ public class WorkflowController : ControllerBase
             _context.WorkflowSteps.AddRange(workflowSteps);
             await _context.SaveChangesAsync();
 
-            return Ok(new { WorkflowDefinitionId = workflowDef.Id, Message = "Demo workflow created successfully" });
+            return Ok(new { WorkflowDefinitionId = workflowDef.Id, Message = "Workflow de demonstração criado com sucesso!" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating demo workflow");
-            return StatusCode(500, "Internal server error");
+            _logger.LogError(ex, "Ocorreu um erro ao criar o workflow de demonstração.");
+            return StatusCode(500, "Ocorreu um erro inexperado");
         }
     }
 }

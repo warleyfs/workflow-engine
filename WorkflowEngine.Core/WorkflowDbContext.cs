@@ -3,12 +3,8 @@ using WorkflowEngine.Core.Entities;
 
 namespace WorkflowEngine.Core.Data;
 
-public class WorkflowDbContext : DbContext
+public class WorkflowDbContext(DbContextOptions<WorkflowDbContext> options) : DbContext(options)
 {
-    public WorkflowDbContext(DbContextOptions<WorkflowDbContext> options) : base(options)
-    {
-    }
-
     public DbSet<WorkflowDefinition> WorkflowDefinitions { get; set; }
     public DbSet<StepDefinition> StepDefinitions { get; set; }
     public DbSet<WorkflowStep> WorkflowSteps { get; set; }
@@ -114,7 +110,9 @@ public class WorkflowDbContext : DbContext
         // StepExecution configuration
         modelBuilder.Entity<StepExecution>(entity =>
         {
+            entity.ToTable("step_executions");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.HasOne(e => e.WorkflowExecution)
                   .WithMany(e => e.StepExecutions)
                   .HasForeignKey(e => e.WorkflowExecutionId)

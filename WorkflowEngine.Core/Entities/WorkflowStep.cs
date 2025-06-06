@@ -5,6 +5,7 @@ public class WorkflowStep
     public Guid Id { get; set; } = Guid.NewGuid();
     
     public Guid WorkflowDefinitionId { get; set; }
+    
     public Guid StepDefinitionId { get; set; }
     
     public int Order { get; set; }
@@ -22,7 +23,9 @@ public class WorkflowStep
     
     // Navigation properties
     public virtual WorkflowDefinition WorkflowDefinition { get; set; } = null!;
+    
     public virtual StepDefinition StepDefinition { get; set; } = null!;
+    
     public virtual ICollection<StepExecution> Executions { get; set; } = new List<StepExecution>();
 }
 
