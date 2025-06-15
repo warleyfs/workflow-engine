@@ -82,7 +82,7 @@ const nodeTypes: NodeTypes = {
 const WorkflowDesigner: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState('');
   const [workflowDescription, setWorkflowDescription] = useState('');
@@ -100,10 +100,25 @@ const WorkflowDesigner: React.FC = () => {
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
+  // Adicione este handler fora do onDrop:
+  const handleConfigClick = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => {
+        const node = nds.find(n => n.id === nodeId);
+        if (node) {
+          setSelectedNode(node);
+          setNodeConfig(node.data.configuration || {});
+          setConfigDialogOpen(true);
+        }
+        return nds;
+      });
+    },
+    [setNodes]
+  );
+
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-
       const stepType = event.dataTransfer.getData('application/reactflow');
       const step = stepTypes.find(s => s.type === stepType);
 
@@ -122,20 +137,13 @@ const WorkflowDesigner: React.FC = () => {
           label: step.name,
           stepType: step.type,
           configuration: {},
-          onConfigClick: (nodeId: string) => {
-            const node = nodes.find(n => n.id === nodeId);
-            if (node) {
-              setSelectedNode(node);
-              setNodeConfig(node.data.configuration || {});
-              setConfigDialogOpen(true);
-            }
-          }
+          onConfigClick: handleConfigClick, // <-- use o handler externo
         },
       };
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [nodes, setNodes]
+    [setNodes, handleConfigClick]
   );
 
   const onDragStart = (event: React.DragEvent, stepType: string) => {
@@ -231,12 +239,12 @@ const WorkflowDesigner: React.FC = () => {
       >
         <Toolbar>
           <Typography variant="h6">Componentes</Typography>
-          <IconButton
+          {/* <IconButton
             sx={{ ml: 'auto' }}
             onClick={() => setDrawerOpen(false)}
           >
             <CloseIcon />
-          </IconButton>
+          </IconButton> */}
         </Toolbar>
         <Divider />
         <List>
@@ -267,14 +275,14 @@ const WorkflowDesigner: React.FC = () => {
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         {/* Toolbar */}
         <Paper sx={{ p: 1, mb: 1 }}>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <Button
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'right' }}>
+            {/* <Button
               startIcon={<AddIcon />}
               onClick={() => setDrawerOpen(true)}
               variant="outlined"
             >
               Componentes
-            </Button>
+            </Button> */}
             <Button
               startIcon={<SaveIcon />}
               onClick={() => setSaveDialogOpen(true)}

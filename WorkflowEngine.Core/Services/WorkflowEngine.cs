@@ -142,7 +142,8 @@ public class WorkflowEngine(
         var execution = await context.WorkflowExecutions
             .FirstOrDefaultAsync(e => e.Id == workflowExecutionId, cancellationToken);
 
-        if (execution == null || execution.Status == WorkflowExecutionStatus.Completed ||
+        if (execution == null || 
+            execution.Status == WorkflowExecutionStatus.Completed ||
             execution.Status == WorkflowExecutionStatus.Failed ||
             execution.Status == WorkflowExecutionStatus.Cancelled)
             return false;
